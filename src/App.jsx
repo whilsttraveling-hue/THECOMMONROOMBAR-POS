@@ -1,3 +1,6 @@
+import React, { useState, useEffect, useRef } from 'react';
+import QRCode from 'qrcode'; //
+import { storage } from './storage'; //
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Beer, LogOut, Plus, Minus, X, Receipt, TrendingUp, Package, IndianRupee, Clock, ChevronRight, Check, AlertTriangle, BarChart3, Users, Settings, Trash2, Edit3, Wifi, WifiOff, Lock } from "lucide-react";
 import { cloudGet, cloudSet } from "./storage.js";
@@ -943,10 +946,6 @@ function MenuAdmin({ menu, pushMenu, showToast }) {
   );
 }
 const iconBtn = { background: C.panel2, border: `1px solid ${C.border}`, borderRadius: 6, width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", color: C.textDim };
-import React, { useState, useEffect, useRef } from 'react';
-import QRCode from 'qrcode'; //
-import { storage } from './storage'; //
-
 // ... your existing variables (like your const C, const iconBtn, etc.) go here
 
 export default function App() {
