@@ -943,3 +943,236 @@ function MenuAdmin({ menu, pushMenu, showToast }) {
   );
 }
 const iconBtn = { background: C.panel2, border: `1px solid ${C.border}`, borderRadius: 6, width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", color: C.textDim };
+import React, { useState, useEffect, useRef } from 'react';
+import QRCode from 'qrcode';
+import { storage } from './storage';
+
+export default function App() {
+  // Global integrated states
+  const [appData, setAppData] = useState(storage.getData());
+  const [activeTab, setActiveTab] = useState('billing'); // billing, inventory, orders, analytics
+
+  // Login states
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  // Billing states
+  const [selectedProduct, setSelectedProduct] = useState('');
+  const [quantity, setQuantity] = useState(1);
+  const [activeInvoice, setActiveInvoice] = useState(`INV-${Date.now().toString().slice(-6)}`);
+  const [currentBillTotal, setCurrentBillTotal] = useState(0);
+  const [currentCostTotal, setCurrentCostTotal] = useState(0);
+  const [currentItemsDesc, setCurrentItemsDesc] = useState('');
+  const qrCanvasRef = useRef(null);
+
+  // New product form state
+  const [newProdName, setNewProdName] = useState('');
+  const [newProdPP, setNewProdPP] = useState('');
+  const [newProdSP, setNewProdSP] = useState('');
+  const [newProdStock, setNewProdStock] = useState('');
+
+  // Renders the automatic dynamic payment QR code based on billing status
+  useEffect(() => {
+    if (!qrCanvasRef.current || currentBillTotal <= 0) return;
+
+    const formattedAmount = parseFloat(currentBillTotal).toFixed(2);
+    const upiPayload = `upi://pay?pa=${appData.merchantConfig.upiId}` +
+                       `&pn=${encodeURIComponent(appData.merchantConfig.businessName)}` +
+                       `&am=${formattedAmount}` +
+                       `&tr=${activeInvoice}` +
+                       `&tn=${encodeURIComponent(`Invoice #${activeInvoice}`)}` +
+                       `&cu=INR`;
+
+    QRCode.toCanvas(qrCanvasRef.current, upiPayload, {
+      width: 200,
+      margin: 1,
+      color: { dark: '#1e293b', light: '#ffffff' }
+    }, (err) => {
+      if (err) console.error("QR display error:", err);
+    });
+  }, [currentBillTotal, activeInvoice, appData.merchantConfig]);
+
+  // Authenticate user against seed information records
+  const handleLogin = (e) => {
+    e.preventDefault();
+    const foundUser = appData.users.find(
+      u => u.username.toLowerCase() === username.toLowerCase() && u.password === password
+    );
+
+    if (foundUser) {
+      const updatedData = { ...appData, userSession: foundUser.username };
+      setAppData(updatedData);
+      storage.saveData(updatedData);
+      setLoginError('');
+      setUsername('');
+      setPassword('');
+    } else {
+      setLoginError('Invalid username or password credentials.');
+    }
+  };
+
+  // Sign out handler
+  const handleLogout = () => {
+    const updatedData = { ...appData, userSession: null };
+    setAppData(updatedData);
+    storage.saveData(updatedData);
+  };
+
+  // Handle local dynamic additions to current basket
+  const handleGenerateBill = (e) => {
+    e.preventDefault();
+    const prod = appData.inventory.find(i => i.id === selectedProduct);
+    if (!prod) return;
+
+    const billingSum = prod.sellingPrice * parseInt(quantity);
+    const costSum = prod.purchasePrice * parseInt(quantity);
+    
+    setCurrentBillTotal(billingSum);
+    setCurrentCostTotal(costSum);
+    setCurrentItemsDesc(`${prod.name} x${quantity}`);
+    setActiveInvoice(`INV-${Date.now().toString().slice(-6)}`);
+  };
+
+  // Mark invoice paid, deduct stock inventory, and archive details into storage log
+  const handleConfirmPayment = () => {
+    const updatedInventory = appData.inventory.map(item => {
+      if (item.id === selectedProduct) {
+        return { ...item, stock: Math.max(0, item.stock - parseInt(quantity)) };
+      }
+      return item;
+    });
+
+    const refreshedData = { ...appData, inventory: updatedInventory };
+    storage.saveData(refreshedData);
+    
+    const finalState = storage.commitOrder(currentBillTotal, activeInvoice, currentItemsDesc, currentCostTotal);
+    setAppData(finalState);
+    
+    setCurrentBillTotal(0);
+    setCurrentCostTotal(0);
+    setCurrentItemsDesc('');
+    alert(`Order ${activeInvoice} safely accounted for and completed successfully!`);
+  };
+
+  // Manage updates to live Product Selling/Purchase costs across inventory files
+  const handleUpdatePrices = (productId, key, updatedValue) => {
+    const updatedInventory = appData.inventory.map(item => {
+      if (item.id === productId) {
+        return { ...item, [key]: parseFloat(updatedValue) || 0 };
+      }
+      return item;
+    });
+    const nextState = { ...appData, inventory: updatedInventory };
+    setAppData(nextState);
+    storage.saveData(nextState);
+  };
+
+  // Add items into Inventory profile tracking metrics
+  const handleAddNewProduct = (e) => {
+    e.preventDefault();
+    if (!newProdName || !newProdPP || !newProdSP) return;
+
+    const newItem = {
+      id: `PROD-${Date.now().toString().slice(-4)}`,
+      name: newProdName,
+      purchasePrice: parseFloat(newProdPP),
+      sellingPrice: parseFloat(newProdSP),
+      stock: parseInt(newProdStock) || 0
+    };
+
+    const nextState = { ...appData, inventory: [...appData.inventory, newItem] };
+    setAppData(nextState);
+    storage.saveData(nextState);
+
+    setNewProdName('');
+    setNewProdPP('');
+    setNewProdSP('');
+    setNewProdStock('');
+  };
+
+  // Computing operational analytics matrices metrics dynamically
+  const totals = appData.orders.reduce((acc, order) => {
+    acc.revenue += order.amount;
+    acc.profit += order.profit;
+    return acc;
+  }, { revenue: 0, profit: 0 });
+
+  // 🚪 SIGN IN ROUTE LAYOUT VIEW (Renders if userSession is inactive)
+  if (!appData.userSession) {
+    return (
+      <div style={{ fontFamily: 'system-ui, sans-serif', backgroundColor: '#f1f5f9', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+        <div style={{ backgroundColor: '#ffffff', padding: '32px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', width: '100%', maxWidth: '400px' }}>
+          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            <h2 style={{ margin: '0 0 8px 0', color: '#0f172a' }}>Sign In to Ledger</h2>
+            <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>Enter your administrator access criteria</p>
+          </div>
+          
+          <form onSubmit={handleLogin}>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', fontSize: '14px' }}>Username</label>
+              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="e.g., admin" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} required />
+            </div>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', fontSize: '14px' }}>Password</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} required />
+            </div>
+
+            {loginError && <p style={{ color: '#ef4444', fontSize: '13px', margin: '0 0 16px 0', fontWeight: '500' }}>{loginError}</p>}
+
+            <button type="submit" style={{ width: '100%', backgroundColor: '#2563eb', color: '#ffffff', padding: '12px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>Login</button>
+          </form>
+
+          <div style={{ marginTop: '20px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '6px', fontSize: '12px', color: '#64748b', border: '1px dashed #e2e8f0' }}>
+            <strong>Seed Login Info:</strong><br />
+            Username: <code style={{ color: '#0f172a' }}>admin</code><br />
+            Password: <code style={{ color: '#0f172a' }}>password123</code>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 🖥️ MAIN APPLICATIVE DASHBOARD VIEW (Renders if userSession is active)
+  return (
+    <div style={{ fontFamily: 'system-ui, sans-serif', backgroundColor: '#f8fafc', minHeight: '100vh', padding: '24px' }}>
+      
+      {/* Upper Navigation Row Header */}
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', borderBottom: '2px solid #e2e8f0', paddingBottom: '16px', gap: '16px', flexWrap: 'wrap' }}>
+        <h1 style={{ color: '#0f172a', margin: 0, fontSize: '24px' }}>🏪 Smart Retail Management</h1>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginLeft: 'auto' }}>
+          <nav style={{ display: 'flex', gap: '6px' }}>
+            {['billing', 'inventory', 'orders', 'analytics'].map((tab) => (
+              <button 
+                key={tab} 
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  padding: '8px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '13px',
+                  backgroundColor: activeTab === tab ? '#2563eb' : '#e2e8f0',
+                  color: activeTab === tab ? '#ffffff' : '#475569'
+                }}
+              >
+                {tab === 'billing' ? '🛒 Quick Bill POS' : tab === 'inventory' ? '📦 Stock Inventory' : tab === 'orders' ? '📜 Order History' : '📊 Profit Analytics'}
+              </button>
+            ))}
+          </nav>
+          
+          <button onClick={handleLogout} style={{ padding: '8px 12px', backgroundColor: '#ef4444', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer' }}>🚪 Logout</button>
+        </div>
+      </header>
+
+      {/* VIEW SECTION A: POS DYNAMIC BILLING GATEWAY WITH AUTO QR CODE MODULE */}
+      {activeTab === 'billing' && (
+<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}><div style={{ backgroundColor: '#ffffff', padding: '24px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}><h3 style={{ marginTop: 0, color: '#1e293b' }}>Generate New Automated Bill<div style={{ marginBottom: '16px' }}>
+Select Line Item<select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} required>-- Choose Stock SKU --{appData.inventory.map(item => ({item.name} (In Stock: {item.stock} | Price: ₹{item.sellingPrice})))}
+<div style={{ marginBottom: '20px' }}>Units Ordered (Quantity)<input type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} required /><button type="submit" style={{ width: '100%', backgroundColor: '#10b981', color: '#ffffff', padding: '12px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Generate Payment Intent Link
+
+
+<div style={{ backgroundColor: '#ffffff', padding: '24px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px' }}>{currentBillTotal > 0 ? (<div style={{ textAlign: 'center' }}><span style={{ backgroundColor: '#f1f5f9', color: '#334155', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>{activeInvoice}<div style={{ margin: '16px 0' }}><h2 style={{ margin: '0 0 4px 0', color: '#0f172a' }}>₹{currentBillTotal.toFixed(2)}<p style={{ margin: '0 0 16px 0', color: '#64748b', fontSize: '14px' }}>{currentItemsDesc}<button onClick={handleConfirmPayment} style={{ backgroundColor: '#2563eb', color: '#ffffff', padding: '10px 24px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Simulate Verification Success
+
+) : (<p style={{ color: '#64748b', textAlign: 'center', margin: 0 }}>Awaiting bill parameters...Enter inputs to dynamically update client checkouts.)})}{/* VIEW SECTION B: DYNAMIC PURCHASE & STOCK MANAGEMENT INVENTORY MODULATOR */}{activeTab === 'inventory' && (<div style={{ backgroundColor: '#ffffff', padding: '24px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}><h3 style={{ marginTop: 0 }}>Inventory Intake Log Form
+
+<form onSubmit={handleAddNewProduct} style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}><input type="text" placeholder="Item Name" value={newProdName} onChange={(e) => setNewProdName(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: '2 1 200px' }} required /><input type="number" placeholder="Cost Price (₹)" value={newProdPP} onChange={(e) => setNewProdPP(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: '1 1 100px' }} required /><input type="number" placeholder="Sale Price (₹)" value={newProdSP} onChange={(e) => setNewProdSP(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: '1 1 100px' }} required /><input type="number" placeholder="Initial Stock" value={newProdStock} onChange={(e) => setNewProdStock(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: '1 1 100px' }} required /><button type="submit" style={{ backgroundColor: '#0f172a', color: '#ffffff', padding: '10px 20px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>Inward SKU<div style={{ overflowX: 'auto' }}>)}{/* VIEW SECTION C: AUDIT ORDER LOGGING ARCHIVE */}{activeTab === 'orders' && (<div style={{ backgroundColor: '#ffffff', padding: '24px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}><h3 style={{ marginTop: 0 }}>Historical Invoiced Checkout Orders<div style={{ overflowX: 'auto' }}>
+
+)}{/* VIEW SECTION D: REVENUE, MARGIN CHANGES & CALCULATE PROFIT REPORTS */}{activeTab === 'analytics' && (<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '24px', marginBottom: '24px' }}><div style={{ backgroundColor: '#ffffff', padding: '24px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', borderLeft: '4px solid #2563eb' }}><span style={{ color: '#64748b', textTransform: 'uppercase', fontSize: '12px', fontWeight: 'bold' }}>Aggregated Gross Revenue<h1 style={{ margin: '8px 0 0 0', color: '#1e293b' }}>₹{totals.revenue.toFixed(2)}<div style={{ backgroundColor: '#ffffff', padding: '24px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', borderLeft: '4px solid #16a34a' }}><span style={{ color: '#64748b', textTransform: 'uppercase', fontSize: '12px', fontWeight: 'bold' }}>Operational Net Profit<h1 style={{ margin: '8px 0 0 0', color: '#16a34a' }}>₹{totals.profit.toFixed(2)}<div style={{ backgroundColor: '#ffffff', padding: '24px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}><h3 style={{ marginTop: 0, marginBottom: '6px' }}>Manage Unit Financial Margins<p style={{ color: '#64748b', fontSize: '14px', marginTop: 0, marginBottom: '20px' }}>Adjust cost rates dynamically below. Changes apply instantly to checkout updates and performance forecasting templates.<div style={{ overflowX: 'auto' }}>)});}
