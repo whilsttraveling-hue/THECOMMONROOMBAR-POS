@@ -35,3 +35,4 @@ export default function AutoBillQR({ amount, invoiceId }) {
     </div>
   );
 }
+export default PaymentQR; 
