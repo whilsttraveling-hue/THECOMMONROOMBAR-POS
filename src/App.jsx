@@ -12,10 +12,10 @@ const STAFF = [
 const DEFAULT_CATEGORIES = ["Beer", "Snacks"];
 
 const DEFAULT_MENU = [
-  { id: "m1", name: "Peoples", category: "Beer", price: 150, purchaseprice: 80  stock: 42, unit: "bottle" },
-  { id: "m2", name: "Maka", category: "Beer", price: 160, purchaseprice: 90, stock: 24, unit: "bottle" },
-  { id: "m3", name: "Kingfisher Strong", category: "Beer", price: 140, purchaseprice: 40  stock: 30, unit: "bottle" },
-  { id: "m4", name: "Salted Peanuts", category: "Snacks", price: 90, purchase price: 30  stock: 15, unit: "plate" },
+  { id: "m1", name: "Peoples", category: "Beer", price: 150, stock: 42, unit: "bottle" },
+  { id: "m2", name: "Maka", category: "Beer", price: 160, stock: 24, unit: "bottle" },
+  { id: "m3", name: "Kingfisher Strong", category: "Beer", price: 140, stock: 30, unit: "bottle" },
+  { id: "m4", name: "Salted Peanuts", category: "Snacks", price: 90,  stock: 15, unit: "plate" },
 ];
 
 const ROOMS = ["Dorm 3 - Bed 4", "Dorm 3 - Bed 7", "Pvt Room 2", "Dorm 1 - Bed 1", "Pvt Room 5"];
