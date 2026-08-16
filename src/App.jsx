@@ -243,7 +243,7 @@ function LoginScreen({ onLogin, openTabCount }) {
       <GoogleFonts />
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
         <Beer size={32} color={C.brass} />
-        <div style={{ ...displayFont, fontSize: 38, letterSpacing: 1, color: C.text }}>AANGAN BAR</div>
+        <div style={{ ...displayFont, fontSize: 38, letterSpacing: 1, color: C.text }}>COMMON ROOM BAR</div>
       </div>
       <div style={{ color: C.textDim, fontSize: 14, marginBottom: 8, letterSpacing: 2, textTransform: "uppercase" }}>Reception Desk Point of Sale</div>
       <div style={{ color: C.textDim, fontSize: 12, marginBottom: 32, display: "flex", alignItems: "center", gap: 5 }}>
@@ -356,7 +356,7 @@ function TopBar({ shift, view, setView, onEndShift, openTabs, syncState }) {
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, ...displayFont, fontSize: 20, letterSpacing: 0.5 }}>
-          <Beer size={20} color={C.brass} /> AANGAN
+          <Beer size={20} color={C.brass} /> COMMON ROOM
         </div>
         <div style={{ display: "flex", gap: 4 }}>
           <NavBtn id="floor" icon={Receipt} label={`Floor${openTabs ? ` (${openTabs})` : ""}`} />
